@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const os = require('os');
 const pool = require('../config/db');
 
 exports.checkIn = async (req, res) => {
@@ -160,10 +161,10 @@ exports.getEmployeeLeaves = async (req, res) => {
         if (userRes.rows.length === 0) {
             return res.status(404).json({ message: 'User not found' });
         }
-        
+
         let joinDate = new Date(userRes.rows[0].created_at);
         const today = new Date();
-        
+
         // Safety check: if joinDate is invalid or in the future
         if (isNaN(joinDate.getTime()) || joinDate > today) {
             joinDate = new Date();
@@ -194,7 +195,7 @@ exports.getEmployeeLeaves = async (req, res) => {
         // 3. Loop through days from joinDate to today and identify leaves (absences)
         const leaves = [];
         let current = new Date(joinDate);
-        
+
         // Normalize current and today to midnight for precise daily iteration
         current.setHours(0, 0, 0, 0);
         const end = new Date(today);
@@ -213,7 +214,7 @@ exports.getEmployeeLeaves = async (req, res) => {
                 const dateStr = `${y}-${m}-${d}`;
 
                 const status = attendanceMap[dateStr];
-                
+
                 // If there's no record (Absent) or explicit status is 'leave' or 'absent'
                 if (!status || status === 'leave' || status === 'absent') {
                     leaves.push({
@@ -223,7 +224,7 @@ exports.getEmployeeLeaves = async (req, res) => {
                     });
                 }
             }
-            
+
             // Move to next day
             current.setDate(current.getDate() + 1);
         }
@@ -239,14 +240,28 @@ exports.getEmployeeLeaves = async (req, res) => {
 exports.generateQrToken = async (req, res) => {
     try {
         const token = crypto.randomBytes(32).toString('hex');
-        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes validity
 
         const newQr = await pool.query(
             'INSERT INTO qr_tokens (token, expires_at) VALUES ($1, $2) RETURNING token, expires_at',
             [token, expiresAt]
         );
 
-        const qrUrl = `http://localhost:5173/employee?qr=true&token=${token}`;
+        // Auto-detect local network IP of the host machine
+        const networkInterfaces = os.networkInterfaces();
+        let localIp = 'localhost';
+        for (const interfaceName in networkInterfaces) {
+            const interfaces = networkInterfaces[interfaceName];
+            for (const iface of interfaces) {
+                if (iface.family === 'IPv4' && !iface.internal) {
+                    localIp = iface.address;
+                    break;
+                }
+            }
+            if (localIp !== 'localhost') break;
+        }
+
+        const qrUrl = `http://${localIp}:5173/employee?qr=true&token=${token}`;
 
         res.json({
             token: newQr.rows[0].token,
@@ -264,17 +279,63 @@ exports.scanQr = async (req, res) => {
         const userId = req.user.id;
         const { token, latitude, longitude } = req.body;
 
+        console.log('--- scanQr Debug ---');
+        console.log('Received Body:', { token, latitude, longitude });
+        console.log('User ID:', userId);
+
         if (!token) {
             return res.status(400).json({ message: 'QR token is required' });
         }
 
+        // Support full URL token extraction for custom scanner compatibility
+        let verifyToken = token;
+        if (token) {
+            // Robust check to extract 'token' param whether protocol is present or not
+            const tokenMatch = token.match(/[?&]token=([^&]+)/);
+            if (tokenMatch) {
+                verifyToken = tokenMatch[1];
+                console.log('Extracted Token from URL query:', verifyToken);
+            } else if (token.includes('/employee?')) {
+                try {
+                    const urlStr = token.startsWith('http') ? token : 'http://' + token;
+                    const url = new URL(urlStr);
+                    const tokenParam = url.searchParams.get('token');
+                    if (tokenParam) {
+                        verifyToken = tokenParam;
+                        console.log('Extracted Token via URL parsing:', verifyToken);
+                    }
+                } catch (e) {
+                    console.error('URL parsing failed:', e.message);
+                }
+            }
+        }
+
         // 1. Validate Token
         const tokenRes = await pool.query(
-            'SELECT * FROM qr_tokens WHERE token = $1 AND expires_at > CURRENT_TIMESTAMP',
-            [token]
+            'SELECT *, CURRENT_TIMESTAMP as db_now FROM qr_tokens WHERE token = $1',
+            [verifyToken]
         );
 
+        console.log('Token Query Result:', tokenRes.rows);
+
         if (tokenRes.rows.length === 0) {
+            console.log('Token not found in database.');
+            return res.status(400).json({ message: 'Invalid or expired QR code token.' });
+        }
+
+        const dbToken = tokenRes.rows[0];
+        const now = new Date();
+        const expiresAt = new Date(dbToken.expires_at);
+        console.log('Time Comparison:', {
+            serverTime: now.toISOString(),
+            expiresAt: expiresAt.toISOString(),
+            dbNow: dbToken.db_now,
+            isExpired: now > expiresAt
+        });
+
+        // Perform timezone-drift immune validation check in JavaScript (uses server's clock that generated the token)
+        if (now > expiresAt) {
+            console.log('Token is expired according to server time comparison.');
             return res.status(400).json({ message: 'Invalid or expired QR code token.' });
         }
 
@@ -284,7 +345,6 @@ exports.scanQr = async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        const now = new Date();
         const y = now.getFullYear();
         const m = String(now.getMonth() + 1).padStart(2, '0');
         const d = String(now.getDate()).padStart(2, '0');
