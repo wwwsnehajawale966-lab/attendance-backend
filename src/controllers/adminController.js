@@ -44,7 +44,7 @@ const getDashboardStats = async (req, res) => {
             GROUP BY a.date 
             ORDER BY a.date ASC
         `);
-        
+
         const weeklyMap = {};
         weeklyRes.rows.forEach(row => {
             const dObj = new Date(row.date);
@@ -57,28 +57,28 @@ const getDashboardStats = async (req, res) => {
 
         const weeklyTrend = [];
         const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        
+
         for (let i = 6; i >= 0; i--) {
             const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
             const cy = d.getFullYear();
             const cm = String(d.getMonth() + 1).padStart(2, '0');
             const cd = String(d.getDate()).padStart(2, '0');
             const dateStr = `${cy}-${cm}-${cd}`;
-            
+
             const dOfWeek = d.getDay();
             const dayName = dayNamesShort[dOfWeek];
-            
+
             const presentCount = weeklyMap[dateStr] || 0;
             let percentage = totalEmployees > 0 ? Math.round((presentCount / totalEmployees) * 100) : 0;
-            
+
             // Force 0% on Saturdays (6) and Sundays (0) per business rules
             if (dOfWeek === 0 || dOfWeek === 6) {
                 percentage = 0;
             }
-            
+
             // Cap at 100% to prevent calculations over 100% due to legacy data
             percentage = Math.min(100, percentage);
-            
+
             weeklyTrend.push({
                 day: dayName,
                 val: percentage
@@ -324,7 +324,7 @@ const getEmployeeAnalytics = async (req, res) => {
 
         const start = new Date(sYear, sMonth - 1, sDay);
         const end = new Date(eYear, eMonth - 1, eDay);
-        
+
         let totalPresent = 0;
         let totalAbsent = 0;
         let totalLate = 0;
@@ -360,7 +360,7 @@ const getEmployeeAnalytics = async (req, res) => {
             const cm = String(current.getMonth() + 1).padStart(2, '0');
             const cd = String(current.getDate()).padStart(2, '0');
             const dateStr = `${cy}-${cm}-${cd}`;
-            
+
             const dOfWeek = current.getDay();
             const dayName = dayNames[dOfWeek];
             const isWeekend = (dOfWeek === 0 || dOfWeek === 6);

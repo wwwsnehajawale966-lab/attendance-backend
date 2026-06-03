@@ -44,6 +44,14 @@ const register = async (req, res) => {
             [finalName, email, hashedPassword, role || 'employee', employee_id, phone || null, gender || null]
         );
 
+        // If it's an employee registration, notify admins
+        if ((role || 'employee') === 'employee') {
+            await pool.query(
+                'INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)',
+                [null, 'New Employee Registration', `A new employee (${finalName}) has registered and is pending approval.`]
+            );
+        }
+
         res.status(201).json(newUser.rows[0]);
     } catch (err) {
         console.error(err.message);
