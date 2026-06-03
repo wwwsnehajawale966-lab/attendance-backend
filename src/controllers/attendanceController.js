@@ -268,10 +268,19 @@ exports.scanQr = async (req, res) => {
             return res.status(400).json({ message: 'QR token is required' });
         }
 
+        // Extract token from URL if it's a URL or contains 'token='
+        let actualToken = token.trim();
+        if (actualToken.includes('token=')) {
+            const match = actualToken.match(/[?&]token=([^&]+)/);
+            if (match && match[1]) {
+                actualToken = match[1];
+            }
+        }
+
         // 1. Validate Token
         const tokenRes = await pool.query(
             'SELECT * FROM qr_tokens WHERE token = $1 AND expires_at > CURRENT_TIMESTAMP',
-            [token]
+            [actualToken]
         );
 
         if (tokenRes.rows.length === 0) {
