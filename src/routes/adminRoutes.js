@@ -9,11 +9,23 @@ const {
     updateEmployee,
     deleteEmployee,
     getAttendanceReport,
-    getEmployeeAnalytics
+    getEmployeeAnalytics,
+    getPendingEmployees,
+    approveEmployee,
+    rejectEmployee
 } = require('../controllers/adminController');
 
 // @route   GET api/admin/stats
 router.get('/stats', auth, authorize('admin'), getDashboardStats);
+
+// @route   GET api/admin/pending-employees
+router.get('/pending-employees', auth, authorize('admin'), getPendingEmployees);
+
+// @route   PUT api/admin/approve-employee/:id
+router.put('/approve-employee/:id', auth, authorize('admin'), approveEmployee);
+
+// @route   DELETE api/admin/reject-employee/:id
+router.delete('/reject-employee/:id', auth, authorize('admin'), rejectEmployee);
 
 // @route   GET api/admin/recent-attendance
 router.get('/recent-attendance', auth, authorize('admin'), getRecentAttendance);

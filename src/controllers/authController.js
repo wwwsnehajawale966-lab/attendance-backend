@@ -39,9 +39,10 @@ const register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         // Insert user
+        const status = (role || 'employee') === 'admin' ? 'Approved' : 'Pending';
         const newUser = await pool.query(
-            'INSERT INTO users (name, email, password, role, employee_id, phone, gender) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, role, employee_id, phone, gender',
-            [finalName, email, hashedPassword, role || 'employee', employee_id, phone || null, gender || null]
+            'INSERT INTO users (name, email, password, role, employee_id, phone, gender, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, email, role, employee_id, phone, gender, status',
+            [finalName, email, hashedPassword, role || 'employee', employee_id, phone || null, gender || null, status]
         );
 
         // If it's an employee registration, notify admins
@@ -71,6 +72,10 @@ const login = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.rows[0].password);
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid Credentials' });
+        }
+
+        if (user.rows[0].status !== 'Approved') {
+            return res.status(403).json({ message: 'Your account is pending approval or has been rejected. Please contact your administrator.' });
         }
 
         const payload = {
@@ -157,6 +162,10 @@ const employeeLogin = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.rows[0].password);
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid Credentials' });
+        }
+
+        if (user.rows[0].status !== 'Approved') {
+            return res.status(403).json({ message: 'Your account is pending approval or has been rejected. Please contact your administrator.' });
         }
 
         const payload = {
@@ -270,6 +279,36 @@ const deleteProfile = async (req, res) => {
     }
 };
 
+const changePassword = async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+    try {
+        if (!oldPassword || !newPassword) {
+            return res.status(400).json({ message: 'Old and new passwords are required' });
+        }
+
+        const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        const user = userRes.rows[0];
+
+        const isMatch = await bcrypt.compare(oldPassword, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'Incorrect old password' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, req.user.id]);
+
+        res.json({ message: 'Password changed successfully' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
 module.exports = {
     register,
     login,
@@ -278,5 +317,6 @@ module.exports = {
     getMe,
     resetPassword,
     updateProfile,
-    deleteProfile
+    deleteProfile,
+    changePassword
 };

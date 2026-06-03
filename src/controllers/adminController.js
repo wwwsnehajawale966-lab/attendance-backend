@@ -354,12 +354,23 @@ const getEmployeeAnalytics = async (req, res) => {
             return `${hours}h ${minutes}m`;
         };
 
+        const nowLocal = new Date();
+        const tY = nowLocal.getFullYear();
+        const tM = String(nowLocal.getMonth() + 1).padStart(2, '0');
+        const tD = String(nowLocal.getDate()).padStart(2, '0');
+        const todayStr = `${tY}-${tM}-${tD}`;
+
         let current = new Date(start);
         while (current <= end) {
             const cy = current.getFullYear();
             const cm = String(current.getMonth() + 1).padStart(2, '0');
             const cd = String(current.getDate()).padStart(2, '0');
             const dateStr = `${cy}-${cm}-${cd}`;
+
+            if (dateStr > todayStr) {
+                current.setDate(current.getDate() + 1);
+                continue;
+            }
 
             const dOfWeek = current.getDay();
             const dayName = dayNames[dOfWeek];
@@ -486,6 +497,57 @@ const getEmployeeAnalytics = async (req, res) => {
     }
 };
 
+const getPendingEmployees = async (req, res) => {
+    try {
+        const result = await pool.query(
+            "SELECT id, name, email, employee_id, department, phone, gender, created_at, status FROM users WHERE role = 'employee' AND status = 'Pending' ORDER BY created_at DESC"
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+const approveEmployee = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query(
+            "UPDATE users SET status = 'Approved' WHERE id = $1 RETURNING id, name, email, status",
+            [id]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        const user = result.rows[0];
+
+        // Send a notification to the employee
+        await pool.query(
+            "INSERT INTO notifications (user_id, title, message) VALUES ($1, 'Account Approved', 'Your account has been approved by the administrator. You can now log in and mark attendance.')",
+            [id]
+        );
+
+        res.json({ message: 'Employee approved successfully', user });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+const rejectEmployee = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query("DELETE FROM users WHERE id = $1 RETURNING id, name, email", [id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.json({ message: 'Employee rejected and account deleted successfully', user: result.rows[0] });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
 module.exports = {
     getDashboardStats,
     getRecentAttendance,
@@ -494,5 +556,8 @@ module.exports = {
     updateEmployee,
     deleteEmployee,
     getAttendanceReport,
-    getEmployeeAnalytics
+    getEmployeeAnalytics,
+    getPendingEmployees,
+    approveEmployee,
+    rejectEmployee
 };

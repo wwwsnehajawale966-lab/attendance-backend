@@ -13,6 +13,7 @@ const initDb = async () => {
       department VARCHAR(50),
       phone VARCHAR(20),
       gender VARCHAR(20),
+      status VARCHAR(20) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Approved', 'Rejected')),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -46,6 +47,16 @@ const initDb = async () => {
       is_read BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS leave_requests (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      reason TEXT,
+      status VARCHAR(20) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Approved', 'Rejected')),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
   `;
 
   // Migration for existing tables
@@ -58,7 +69,9 @@ const initDb = async () => {
     "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS latitude DECIMAL(10, 8)",
     "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS longitude DECIMAL(11, 8)",
     "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS attendance_date DATE DEFAULT CURRENT_DATE",
-    "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS attendance_method VARCHAR(20) DEFAULT 'TOGGLE'"
+    "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS attendance_method VARCHAR(20) DEFAULT 'TOGGLE'",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Pending'",
+    "UPDATE users SET status = 'Approved' WHERE status IS NULL"
   ];
 
   try {
