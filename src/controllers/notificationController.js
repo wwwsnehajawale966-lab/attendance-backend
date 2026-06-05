@@ -10,7 +10,7 @@ exports.getNotifications = async (req, res) => {
 
         if (userRole === 'admin') {
             queryText = `
-                SELECT id, user_id, title, message, is_read, created_at 
+                SELECT id, user_id, title, message, is_read, created_at, related_id 
                 FROM notifications 
                 WHERE user_id = $1 OR user_id IS NULL 
                 ORDER BY created_at DESC 
@@ -18,7 +18,7 @@ exports.getNotifications = async (req, res) => {
             `;
         } else {
             queryText = `
-                SELECT id, user_id, title, message, is_read, created_at 
+                SELECT id, user_id, title, message, is_read, created_at, related_id 
                 FROM notifications 
                 WHERE user_id = $1 
                 ORDER BY created_at DESC 
@@ -102,6 +102,44 @@ exports.markAllAsRead = async (req, res) => {
 
         await pool.query(queryText, params);
         res.json({ message: 'All notifications marked as read' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+exports.deleteNotification = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+        const userRole = req.user.role;
+
+        let queryText = '';
+        let params = [id];
+
+        if (userRole === 'admin') {
+            queryText = `
+                DELETE FROM notifications 
+                WHERE id = $1 AND (user_id = $2 OR user_id IS NULL) 
+                RETURNING *
+            `;
+            params.push(userId);
+        } else {
+            queryText = `
+                DELETE FROM notifications 
+                WHERE id = $1 AND user_id = $2 
+                RETURNING *
+            `;
+            params.push(userId);
+        }
+
+        const result = await pool.query(queryText, params);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Notification not found or unauthorized' });
+        }
+
+        res.json({ message: 'Notification deleted' });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');

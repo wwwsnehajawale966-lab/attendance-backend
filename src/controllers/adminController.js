@@ -3,8 +3,8 @@ const pool = require('../config/db');
 
 const getDashboardStats = async (req, res) => {
     try {
-        // 1. Total Employees
-        const totalEmpRes = await pool.query("SELECT COUNT(*) FROM users WHERE role = 'employee'");
+        // 1. Total Employees (Only approved)
+        const totalEmpRes = await pool.query("SELECT COUNT(*) FROM users WHERE role = 'employee' AND LOWER(status) = 'approved'");
         const totalEmployees = parseInt(totalEmpRes.rows[0].count);
 
         // 2. Today's Presence (Only employees)
@@ -146,8 +146,8 @@ const addEmployee = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const newUser = await pool.query(
-            'INSERT INTO users (name, email, password, role, employee_id, department, phone, gender) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, email, role, employee_id, department, phone, gender',
-            [finalName, email, hashedPassword, role || 'employee', employee_id, department, phone || null, gender || null]
+            'INSERT INTO users (name, email, password, role, employee_id, department, phone, gender, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, email, role, employee_id, department, phone, gender, status',
+            [finalName, email, hashedPassword, role || 'employee', employee_id, department, phone || null, gender || null, 'approved']
         );
 
         res.status(201).json({
@@ -163,7 +163,7 @@ const addEmployee = async (req, res) => {
 
 const getEmployees = async (req, res) => {
     try {
-        const employees = await pool.query("SELECT id, name, email, role, employee_id, department, phone, gender, created_at FROM users WHERE role = 'employee' ORDER BY created_at DESC");
+        const employees = await pool.query("SELECT id, name, email, role, employee_id, department, phone, gender, status, created_at FROM users WHERE role = 'employee' ORDER BY created_at DESC");
         res.json(employees.rows);
     } catch (err) {
         console.error(err.message);
@@ -486,6 +486,92 @@ const getEmployeeAnalytics = async (req, res) => {
     }
 };
 
+const getPendingApprovals = async (req, res) => {
+    try {
+        const pending = await pool.query(
+            "SELECT id, name, email, role, department, phone, gender, created_at FROM users WHERE role = 'employee' AND LOWER(status) = 'pending' ORDER BY created_at DESC"
+        );
+        res.json(pending.rows);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+const approveEmployee = async (req, res) => {
+    const { id } = req.params;
+    try {
+        // Check if user exists and is pending
+        const userRes = await pool.query("SELECT * FROM users WHERE id = $1 AND role = 'employee'", [id]);
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ message: 'Employee not found' });
+        }
+        
+        const user = userRes.rows[0];
+        if (user.status === 'approved') {
+            return res.status(400).json({ message: 'Employee is already approved' });
+        }
+
+        // Generate Employee ID robustly (find max ID for current year and increment)
+        const currentYear = new Date().getFullYear();
+        const yearPrefix = `EMP-${currentYear}-`;
+        const maxIdRes = await pool.query(
+            "SELECT employee_id FROM users WHERE employee_id LIKE $1 ORDER BY employee_id DESC LIMIT 1",
+            [`${yearPrefix}%`]
+        );
+        let nextNumber = 1;
+        if (maxIdRes.rows.length > 0) {
+            const lastId = maxIdRes.rows[0].employee_id;
+            if (lastId) {
+                const lastNumStr = lastId.replace(yearPrefix, '');
+                const lastNum = parseInt(lastNumStr, 10);
+                if (!isNaN(lastNum)) {
+                    nextNumber = lastNum + 1;
+                }
+            }
+        }
+        const employee_id = `EMP-${currentYear}-${String(nextNumber).padStart(3, '0')}`;
+
+        // Update user status and employee_id
+        const updated = await pool.query(
+            "UPDATE users SET status = 'approved', employee_id = $1 WHERE id = $2 RETURNING id, name, email, employee_id, department, status",
+            [employee_id, id]
+        );
+
+        // Send notification to employee
+        await pool.query(
+            "INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)",
+            [id, 'Account Approved', `Welcome! Your account has been approved by the Admin. Your Employee ID is ${employee_id}.`]
+        );
+
+        res.json({
+            message: 'Employee approved successfully',
+            user: updated.rows[0]
+        });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+const rejectEmployee = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const userRes = await pool.query("SELECT * FROM users WHERE id = $1 AND role = 'employee'", [id]);
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ message: 'Employee not found' });
+        }
+
+        // Delete the user record so they can sign up again
+        await pool.query("DELETE FROM users WHERE id = $1", [id]);
+
+        res.json({ message: 'Employee registration request rejected and deleted successfully' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
 module.exports = {
     getDashboardStats,
     getRecentAttendance,
@@ -494,5 +580,8 @@ module.exports = {
     updateEmployee,
     deleteEmployee,
     getAttendanceReport,
-    getEmployeeAnalytics
+    getEmployeeAnalytics,
+    getPendingApprovals,
+    approveEmployee,
+    rejectEmployee
 };

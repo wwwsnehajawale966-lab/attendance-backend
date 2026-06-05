@@ -13,6 +13,7 @@ const initDb = async () => {
       department VARCHAR(50),
       phone VARCHAR(20),
       gender VARCHAR(20),
+      status VARCHAR(20) DEFAULT 'approved',
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -44,6 +45,7 @@ const initDb = async () => {
       title VARCHAR(100) NOT NULL,
       message TEXT NOT NULL,
       is_read BOOLEAN DEFAULT FALSE,
+      related_id INTEGER,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `;
@@ -54,11 +56,13 @@ const initDb = async () => {
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(50)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(20)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'approved'",
     "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS working_hours VARCHAR(20)",
     "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS latitude DECIMAL(10, 8)",
     "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS longitude DECIMAL(11, 8)",
     "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS attendance_date DATE DEFAULT CURRENT_DATE",
-    "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS attendance_method VARCHAR(20) DEFAULT 'TOGGLE'"
+    "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS attendance_method VARCHAR(20) DEFAULT 'TOGGLE'",
+    "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS related_id INTEGER"
   ];
 
   try {

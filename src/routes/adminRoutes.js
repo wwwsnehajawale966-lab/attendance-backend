@@ -9,7 +9,10 @@ const {
     updateEmployee,
     deleteEmployee,
     getAttendanceReport,
-    getEmployeeAnalytics
+    getEmployeeAnalytics,
+    getPendingApprovals,
+    approveEmployee,
+    rejectEmployee
 } = require('../controllers/adminController');
 
 // @route   GET api/admin/stats
@@ -35,6 +38,15 @@ router.get('/report', auth, authorize('admin'), getAttendanceReport);
 
 // @route   GET api/admin/employee/:id/analytics
 router.get('/employee/:id/analytics', auth, authorize('admin'), getEmployeeAnalytics);
+
+// @route   GET api/admin/pending-approvals
+router.get('/pending-approvals', auth, authorize('admin'), getPendingApprovals);
+
+// @route   PUT api/admin/approve-employee/:id
+router.put('/approve-employee/:id', auth, authorize('admin'), approveEmployee);
+
+// @route   PUT api/admin/reject-employee/:id
+router.put('/reject-employee/:id', auth, authorize('admin'), rejectEmployee);
 
 module.exports = router;
 

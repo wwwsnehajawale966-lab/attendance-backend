@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 
 const register = async (req, res) => {
-    const { name, email, password, role, full_name, phone, gender } = req.body;
+    const { name, email, password, role, full_name, department, phone, gender } = req.body;
     const finalName = name || full_name;
 
     try {
@@ -13,26 +13,8 @@ const register = async (req, res) => {
             return res.status(400).json({ message: 'User already exists' });
         }
 
-        // Generate Employee ID robustly (find max ID for current year and increment)
-        let employee_id = null;
-        if ((role || 'employee') === 'employee') {
-            const currentYear = new Date().getFullYear();
-            const yearPrefix = `EMP-${currentYear}-`;
-            const maxIdRes = await pool.query(
-                "SELECT employee_id FROM users WHERE employee_id LIKE $1 ORDER BY employee_id DESC LIMIT 1",
-                [`${yearPrefix}%`]
-            );
-            let nextNumber = 1;
-            if (maxIdRes.rows.length > 0) {
-                const lastId = maxIdRes.rows[0].employee_id;
-                const lastNumStr = lastId.replace(yearPrefix, '');
-                const lastNum = parseInt(lastNumStr, 10);
-                if (!isNaN(lastNum)) {
-                    nextNumber = lastNum + 1;
-                }
-            }
-            employee_id = `EMP-${currentYear}-${String(nextNumber).padStart(3, '0')}`;
-        }
+        const isEmployee = (role || 'employee') === 'employee';
+        const status = isEmployee ? 'pending' : 'approved';
 
         // Hash password
         const salt = await bcrypt.genSalt(10);
@@ -40,15 +22,15 @@ const register = async (req, res) => {
 
         // Insert user
         const newUser = await pool.query(
-            'INSERT INTO users (name, email, password, role, employee_id, phone, gender) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, role, employee_id, phone, gender',
-            [finalName, email, hashedPassword, role || 'employee', employee_id, phone || null, gender || null]
+            'INSERT INTO users (name, email, password, role, employee_id, department, phone, gender, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, email, role, employee_id, department, phone, gender, status',
+            [finalName, email, hashedPassword, role || 'employee', null, department || null, phone || null, gender || null, status]
         );
 
         // If it's an employee registration, notify admins
-        if ((role || 'employee') === 'employee') {
+        if (isEmployee) {
             await pool.query(
-                'INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)',
-                [null, 'New Employee Registration', `A new employee (${finalName}) has registered and is pending approval.`]
+                'INSERT INTO notifications (user_id, title, message, related_id) VALUES ($1, $2, $3, $4)',
+                [null, 'New Employee Registration', `A new employee (${finalName}) has registered and is pending approval.`, newUser.rows[0].id]
             );
         }
 
@@ -71,6 +53,13 @@ const login = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.rows[0].password);
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid Credentials' });
+        }
+
+        if (user.rows[0].status?.toLowerCase() === 'pending') {
+            return res.status(403).json({ message: 'Your account is pending approval by an admin.' });
+        }
+        if (user.rows[0].status?.toLowerCase() === 'rejected') {
+            return res.status(403).json({ message: 'Your account registration request was rejected by an admin.' });
         }
 
         const payload = {
@@ -117,6 +106,13 @@ const adminLogin = async (req, res) => {
             return res.status(400).json({ message: 'Invalid Credentials' });
         }
 
+        if (user.rows[0].status?.toLowerCase() === 'pending') {
+            return res.status(403).json({ message: 'Your account is pending approval by an admin.' });
+        }
+        if (user.rows[0].status?.toLowerCase() === 'rejected') {
+            return res.status(403).json({ message: 'Your account registration request was rejected by an admin.' });
+        }
+
         const payload = {
             user: {
                 id: user.rows[0].id,
@@ -157,6 +153,13 @@ const employeeLogin = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.rows[0].password);
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid Credentials' });
+        }
+
+        if (user.rows[0].status?.toLowerCase() === 'pending') {
+            return res.status(403).json({ message: 'Your account is pending approval by an admin.' });
+        }
+        if (user.rows[0].status?.toLowerCase() === 'rejected') {
+            return res.status(403).json({ message: 'Your account registration request was rejected by an admin.' });
         }
 
         const payload = {
