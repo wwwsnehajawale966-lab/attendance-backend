@@ -261,7 +261,8 @@ exports.generateQrToken = async (req, res) => {
             if (localIp !== 'localhost') break;
         }
 
-        const qrUrl = `http://${localIp}:5173/employee?qr=true&token=${token}`;
+        const frontendUrl = process.env.FRONTEND_URL || 'https://attendance-frontend-e6zs.vercel.app';
+        const qrUrl = `${frontendUrl}/employee?qr=true&token=${token}`;
 
         res.json({
             token: newQr.rows[0].token,
