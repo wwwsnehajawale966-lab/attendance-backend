@@ -74,7 +74,7 @@ const login = async (req, res) => {
             return res.status(400).json({ message: 'Invalid Credentials' });
         }
 
-        if (user.rows[0].status !== 'Approved') {
+        if (!user.rows[0].status || user.rows[0].status.toLowerCase() !== 'approved') {
             return res.status(403).json({ message: 'Your account is pending approval or has been rejected. Please contact your administrator.' });
         }
 
@@ -164,7 +164,7 @@ const employeeLogin = async (req, res) => {
             return res.status(400).json({ message: 'Invalid Credentials' });
         }
 
-        if (user.rows[0].status !== 'Approved') {
+        if (!user.rows[0].status || user.rows[0].status.toLowerCase() !== 'approved') {
             return res.status(403).json({ message: 'Your account is pending approval or has been rejected. Please contact your administrator.' });
         }
 

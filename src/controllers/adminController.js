@@ -548,6 +548,119 @@ const rejectEmployee = async (req, res) => {
     }
 };
 
+const getPendingLeaves = async (req, res) => {
+    try {
+        const result = await pool.query(
+            "SELECT lr.*, u.name as employee_name, u.email as employee_email FROM leave_requests lr JOIN users u ON lr.user_id = u.id WHERE lr.status = 'Pending' ORDER BY lr.created_at DESC"
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+const approveLeave = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query(
+            "UPDATE leave_requests SET status = 'Approved' WHERE id = $1 RETURNING *",
+            [id]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Leave request not found' });
+        }
+        const leave = result.rows[0];
+
+        const formatLocalDateStr = (dObj) => {
+            const y = dObj.getFullYear();
+            const m = String(dObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
+        const startStr = formatLocalDateStr(leave.start_date);
+        const endStr = formatLocalDateStr(leave.end_date);
+
+        // Insert 'Leave' status into attendance table for all weekdays in the leave range
+        let current = new Date(leave.start_date);
+        const end = new Date(leave.end_date);
+        while (current <= end) {
+            const dOfWeek = current.getDay();
+            const isWeekend = (dOfWeek === 0 || dOfWeek === 6);
+            if (!isWeekend) {
+                const cy = current.getFullYear();
+                const cm = String(current.getMonth() + 1).padStart(2, '0');
+                const cd = String(current.getDate()).padStart(2, '0');
+                const dateStr = `${cy}-${cm}-${cd}`;
+
+                // Check if there is already an attendance record for this day
+                const existRes = await pool.query(
+                    "SELECT id FROM attendance WHERE user_id = $1 AND date = $2",
+                    [leave.user_id, dateStr]
+                );
+                if (existRes.rows.length === 0) {
+                    await pool.query(
+                        "INSERT INTO attendance (user_id, date, attendance_date, status, attendance_method) VALUES ($1, $2, $2, 'Leave', 'Leave Approved')",
+                        [leave.user_id, dateStr]
+                    );
+                }
+            }
+            current.setDate(current.getDate() + 1);
+        }
+
+        // Notify the employee
+        await pool.query(
+            "INSERT INTO notifications (user_id, title, message) VALUES ($1, 'Leave Request Approved', $2)",
+            [
+                leave.user_id,
+                `Your leave request from ${startStr} to ${endStr} has been approved by the administrator.`
+            ]
+        );
+
+        res.json({ message: 'Leave request approved successfully', leave });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+const rejectLeave = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query(
+            "UPDATE leave_requests SET status = 'Rejected' WHERE id = $1 RETURNING *",
+            [id]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Leave request not found' });
+        }
+        const leave = result.rows[0];
+
+        const formatLocalDateStr = (dObj) => {
+            const y = dObj.getFullYear();
+            const m = String(dObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
+        const startStr = formatLocalDateStr(leave.start_date);
+        const endStr = formatLocalDateStr(leave.end_date);
+
+        // Notify the employee
+        await pool.query(
+            "INSERT INTO notifications (user_id, title, message) VALUES ($1, 'Leave Request Rejected', $2)",
+            [
+                leave.user_id,
+                `Your leave request from ${startStr} to ${endStr} has been rejected by the administrator.`
+            ]
+        );
+
+        res.json({ message: 'Leave request rejected successfully', leave });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
 module.exports = {
     getDashboardStats,
     getRecentAttendance,
@@ -559,5 +672,8 @@ module.exports = {
     getEmployeeAnalytics,
     getPendingEmployees,
     approveEmployee,
-    rejectEmployee
+    rejectEmployee,
+    getPendingLeaves,
+    approveLeave,
+    rejectLeave
 };

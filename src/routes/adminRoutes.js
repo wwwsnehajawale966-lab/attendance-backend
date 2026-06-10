@@ -12,7 +12,10 @@ const {
     getEmployeeAnalytics,
     getPendingEmployees,
     approveEmployee,
-    rejectEmployee
+    rejectEmployee,
+    getPendingLeaves,
+    approveLeave,
+    rejectLeave
 } = require('../controllers/adminController');
 
 // @route   GET api/admin/stats
@@ -26,6 +29,15 @@ router.put('/approve-employee/:id', auth, authorize('admin'), approveEmployee);
 
 // @route   DELETE api/admin/reject-employee/:id
 router.delete('/reject-employee/:id', auth, authorize('admin'), rejectEmployee);
+
+// @route   GET api/admin/pending-leaves
+router.get('/pending-leaves', auth, authorize('admin'), getPendingLeaves);
+
+// @route   PUT api/admin/approve-leave/:id
+router.put('/approve-leave/:id', auth, authorize('admin'), approveLeave);
+
+// @route   PUT api/admin/reject-leave/:id
+router.put('/reject-leave/:id', auth, authorize('admin'), rejectLeave);
 
 // @route   GET api/admin/recent-attendance
 router.get('/recent-attendance', auth, authorize('admin'), getRecentAttendance);

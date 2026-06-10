@@ -63,6 +63,7 @@ exports.checkIn = async (req, res) => {
 exports.checkOut = async (req, res) => {
     try {
         const userId = req.user.id;
+        const { latitude, longitude } = req.body;
         const localNow = new Date();
         const y = localNow.getFullYear();
         const m = String(localNow.getMonth() + 1).padStart(2, '0');
@@ -87,8 +88,8 @@ exports.checkOut = async (req, res) => {
         const workingHours = `${hours}h ${minutes}m`;
 
         const updatedRecord = await pool.query(
-            'UPDATE attendance SET check_out = CURRENT_TIMESTAMP, working_hours = $1 WHERE id = $2 RETURNING *',
-            [workingHours, record.rows[0].id]
+            'UPDATE attendance SET check_out = CURRENT_TIMESTAMP, working_hours = $1, latitude = COALESCE($2, latitude), longitude = COALESCE($3, longitude) WHERE id = $4 RETURNING *',
+            [workingHours, latitude !== undefined && latitude !== null ? latitude : null, longitude !== undefined && longitude !== null ? longitude : null, record.rows[0].id]
         );
 
         const userRes = await pool.query('SELECT name FROM users WHERE id = $1', [userId]);
@@ -120,6 +121,27 @@ exports.getTodayStatus = async (req, res) => {
         const m = String(localNow.getMonth() + 1).padStart(2, '0');
         const d = String(localNow.getDate()).padStart(2, '0');
         const today = `${y}-${m}-${d}`;
+
+        if (req.user.role === 'admin') {
+            const records = await pool.query(
+                `SELECT a.*, 
+                        a.user_id as "userId",
+                        a.check_in as "checkIn",
+                        a.check_out as "checkOut",
+                        a.working_hours as "workingHours",
+                        a.attendance_method as "attendanceMethod",
+                        a.attendance_date as "attendanceDate",
+                        u.name, 
+                        u.email, 
+                        u.department, 
+                        u.role as user_role 
+                 FROM attendance a 
+                 JOIN users u ON a.user_id = u.id 
+                 WHERE a.date = $1`,
+                [today]
+            );
+            return res.json(records.rows);
+        }
 
         const record = await pool.query(
             'SELECT * FROM attendance WHERE user_id = $1 AND date = $2',
@@ -465,6 +487,12 @@ exports.getSelfAnalytics = async (req, res) => {
         const tD = String(nowLocal.getDate()).padStart(2, '0');
         const todayStr = `${tY}-${tM}-${tD}`;
 
+        const joinDate = new Date(employee.created_at);
+        const jy = joinDate.getFullYear();
+        const jm = String(joinDate.getMonth() + 1).padStart(2, '0');
+        const jd = String(joinDate.getDate()).padStart(2, '0');
+        const joinDateStr = `${jy}-${jm}-${jd}`;
+
         let current = new Date(start);
         while (current <= end) {
             const cy = current.getFullYear();
@@ -472,7 +500,7 @@ exports.getSelfAnalytics = async (req, res) => {
             const cd = String(current.getDate()).padStart(2, '0');
             const dateStr = `${cy}-${cm}-${cd}`;
 
-            if (dateStr > todayStr) {
+            if (dateStr > todayStr || dateStr < joinDateStr) {
                 current.setDate(current.getDate() + 1);
                 continue;
             }
