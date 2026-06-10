@@ -300,10 +300,15 @@ exports.generateQrToken = async (req, res) => {
 exports.scanQr = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { token, latitude, longitude } = req.body;
+        const { token, latitude, longitude, lat, lng } = req.body;
+
+        // Fallback for React Native apps sending shorthand keys (lat/lng) instead of full words
+        const finalLat = latitude !== undefined && latitude !== null ? latitude : (lat !== undefined && lat !== null ? lat : null);
+        const finalLng = longitude !== undefined && longitude !== null ? longitude : (lng !== undefined && lng !== null ? lng : null);
 
         console.log('--- scanQr Debug ---');
-        console.log('Received Body:', { token, latitude, longitude });
+        console.log('Received Body:', req.body);
+        console.log('Parsed Location:', { finalLat, finalLng });
         console.log('User ID:', userId);
 
         if (!token) {
@@ -397,7 +402,7 @@ exports.scanQr = async (req, res) => {
 
             const updatedRecord = await pool.query(
                 'UPDATE attendance SET check_out = CURRENT_TIMESTAMP, working_hours = $1, latitude = COALESCE($2, latitude), longitude = COALESCE($3, longitude) WHERE id = $4 RETURNING *',
-                [workingHours, latitude !== undefined && latitude !== null ? latitude : null, longitude !== undefined && longitude !== null ? longitude : null, record.id]
+                [workingHours, finalLat, finalLng, record.id]
             );
 
             const empName = userRes.rows[0].name;
@@ -428,7 +433,7 @@ exports.scanQr = async (req, res) => {
 
         const newRecord = await pool.query(
             'INSERT INTO attendance (user_id, check_in, date, attendance_date, latitude, longitude, status, attendance_method) VALUES ($1, CURRENT_TIMESTAMP, $2, $2, $3, $4, $5, $6) RETURNING *',
-            [userId, today, latitude !== undefined && latitude !== null ? latitude : null, longitude !== undefined && longitude !== null ? longitude : null, status, 'QR']
+            [userId, today, finalLat, finalLng, status, 'QR']
         );
 
         const empName = userRes.rows[0].name;
