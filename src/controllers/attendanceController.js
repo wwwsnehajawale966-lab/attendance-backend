@@ -309,8 +309,8 @@ exports.scanQr = async (req, res) => {
             if (obj.latitude !== undefined && obj.longitude !== undefined) {
                 finalLat = obj.latitude; finalLng = obj.longitude; return;
             }
-            if (obj.lat !== undefined && obj.lng !== undefined) {
-                finalLat = obj.lat; finalLng = obj.lng; return;
+            if (obj.lat !== undefined && (obj.lng !== undefined || obj.long !== undefined)) {
+                finalLat = obj.lat; finalLng = obj.lng !== undefined ? obj.lng : obj.long; return;
             }
             Object.values(obj).forEach(searchLoc);
         };
