@@ -300,14 +300,24 @@ exports.generateQrToken = async (req, res) => {
 exports.scanQr = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { token, latitude, longitude, lat, lng } = req.body;
+        const { token } = req.body;
 
-        // Fallback for React Native apps sending shorthand keys (lat/lng) instead of full words
-        const finalLat = latitude !== undefined && latitude !== null ? latitude : (lat !== undefined && lat !== null ? lat : null);
-        const finalLng = longitude !== undefined && longitude !== null ? longitude : (lng !== undefined && lng !== null ? lng : null);
+        // Foolproof Deep Search for React Native & Web location payloads
+        let finalLat = null, finalLng = null;
+        const searchLoc = (obj) => {
+            if (!obj || typeof obj !== 'object') return;
+            if (obj.latitude !== undefined && obj.longitude !== undefined) {
+                finalLat = obj.latitude; finalLng = obj.longitude; return;
+            }
+            if (obj.lat !== undefined && obj.lng !== undefined) {
+                finalLat = obj.lat; finalLng = obj.lng; return;
+            }
+            Object.values(obj).forEach(searchLoc);
+        };
+        searchLoc(req.body);
 
         console.log('--- scanQr Debug ---');
-        console.log('Received Body:', req.body);
+        console.log('Received Body:', JSON.stringify(req.body, null, 2));
         console.log('Parsed Location:', { finalLat, finalLng });
         console.log('User ID:', userId);
 
