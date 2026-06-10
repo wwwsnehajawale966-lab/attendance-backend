@@ -302,6 +302,12 @@ exports.scanQr = async (req, res) => {
         const userId = req.user.id;
         const { token } = req.body;
 
+        try {
+            await pool.query('INSERT INTO scan_logs (body, query) VALUES ($1, $2)', [JSON.stringify(req.body), JSON.stringify(req.query)]);
+        } catch(e) {
+            console.error('Failed to log scan:', e);
+        }
+
         // Foolproof Deep Search for React Native & Web location payloads
         let finalLat = null, finalLng = null;
         const searchLoc = (obj) => {
@@ -315,6 +321,11 @@ exports.scanQr = async (req, res) => {
             Object.values(obj).forEach(searchLoc);
         };
         searchLoc(req.body);
+        
+        // Also check query parameters just in case the React Native app sends it in the URL
+        if (finalLat === null && finalLng === null) {
+            searchLoc(req.query);
+        }
 
         console.log('--- scanQr Debug ---');
         console.log('Received Body:', JSON.stringify(req.body, null, 2));
