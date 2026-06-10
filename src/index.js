@@ -55,7 +55,7 @@ app.use((err, req, res, next) => {
     res.status(500).send('Something broke!');
 });
 
-if (process.env.NODE_ENV !== 'production') {
+if (!process.env.VERCEL) {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`Server is running on port ${PORT}`);
     });
