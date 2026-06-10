@@ -6,7 +6,22 @@ const pool = require('../config/db');
 exports.checkIn = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { latitude, longitude, method } = req.body;
+        const { method } = req.body;
+        
+        // Foolproof Deep Search for React Native & Web location payloads
+        let finalLat = null, finalLng = null;
+        const searchLoc = (obj) => {
+            if (!obj || typeof obj !== 'object') return;
+            if (obj.latitude !== undefined && obj.longitude !== undefined) {
+                finalLat = obj.latitude; finalLng = obj.longitude; return;
+            }
+            if (obj.lat !== undefined && (obj.lng !== undefined || obj.long !== undefined)) {
+                finalLat = obj.lat; finalLng = obj.lng !== undefined ? obj.lng : obj.long; return;
+            }
+            Object.values(obj).forEach(searchLoc);
+        };
+        searchLoc(req.body);
+        if (finalLat === null && finalLng === null) searchLoc(req.query);
 
         // Fetch user from DB to verify user exists
         const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
@@ -37,7 +52,7 @@ exports.checkIn = async (req, res) => {
 
         const newRecord = await pool.query(
             'INSERT INTO attendance (user_id, check_in, date, attendance_date, latitude, longitude, status, attendance_method) VALUES ($1, CURRENT_TIMESTAMP, $2, $2, $3, $4, $5, $6) RETURNING *',
-            [userId, today, latitude !== undefined && latitude !== null ? latitude : null, longitude !== undefined && longitude !== null ? longitude : null, status, method || 'TOGGLE']
+            [userId, today, finalLat, finalLng, status, method || 'TOGGLE']
         );
 
         const empName = userRes.rows[0].name;
@@ -64,7 +79,23 @@ exports.checkIn = async (req, res) => {
 exports.checkOut = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { latitude, longitude } = req.body;
+        const { method } = req.body;
+        
+        // Foolproof Deep Search for React Native & Web location payloads
+        let finalLat = null, finalLng = null;
+        const searchLoc = (obj) => {
+            if (!obj || typeof obj !== 'object') return;
+            if (obj.latitude !== undefined && obj.longitude !== undefined) {
+                finalLat = obj.latitude; finalLng = obj.longitude; return;
+            }
+            if (obj.lat !== undefined && (obj.lng !== undefined || obj.long !== undefined)) {
+                finalLat = obj.lat; finalLng = obj.lng !== undefined ? obj.lng : obj.long; return;
+            }
+            Object.values(obj).forEach(searchLoc);
+        };
+        searchLoc(req.body);
+        if (finalLat === null && finalLng === null) searchLoc(req.query);
+
         const localNow = new Date();
         const y = localNow.getFullYear();
         const m = String(localNow.getMonth() + 1).padStart(2, '0');
@@ -90,7 +121,7 @@ exports.checkOut = async (req, res) => {
 
         const updatedRecord = await pool.query(
             'UPDATE attendance SET check_out = CURRENT_TIMESTAMP, working_hours = $1, latitude = COALESCE($2, latitude), longitude = COALESCE($3, longitude) WHERE id = $4 RETURNING *',
-            [workingHours, latitude !== undefined && latitude !== null ? latitude : null, longitude !== undefined && longitude !== null ? longitude : null, record.rows[0].id]
+            [workingHours, finalLat, finalLng, record.rows[0].id]
         );
 
         const userRes = await pool.query('SELECT name FROM users WHERE id = $1', [userId]);
