@@ -45,8 +45,10 @@ exports.checkIn = async (req, res) => {
         }
 
         // Late Logic: After 10:00 AM
-        const hour = now.getHours();
-        const minute = now.getMinutes();
+        const istDateStr = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+        const istDate = new Date(istDateStr);
+        const hour = istDate.getHours();
+        const minute = istDate.getMinutes();
         const isLate = (hour > 10) || (hour === 10 && minute > 0);
         const status = isLate ? 'Late' : 'Present';
 
@@ -478,8 +480,10 @@ exports.scanQr = async (req, res) => {
 
         // 3. Perform Check-In
         // Late Logic: After 10:00 AM
-        const hour = now.getHours();
-        const minute = now.getMinutes();
+        const istDateStr = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+        const istDate = new Date(istDateStr);
+        const hour = istDate.getHours();
+        const minute = istDate.getMinutes();
         const isLate = (hour > 10) || (hour === 10 && minute > 0);
         const status = isLate ? 'Late' : 'Present';
 

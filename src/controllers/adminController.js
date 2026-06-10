@@ -226,8 +226,10 @@ const getAttendanceReport = async (req, res) => {
 
             if (item.check_in) {
                 const checkIn = new Date(item.check_in);
-                const checkInHour = checkIn.getHours();
-                const checkInMinute = checkIn.getMinutes();
+                const istCheckInStr = checkIn.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+                const istCheckIn = new Date(istCheckInStr);
+                const checkInHour = istCheckIn.getHours();
+                const checkInMinute = istCheckIn.getMinutes();
                 const checkInMinutesSinceMidnight = checkInHour * 60 + checkInMinute;
                 const targetMinutesSinceMidnight = 10 * 60; // 10:00 AM
 
@@ -243,8 +245,10 @@ const getAttendanceReport = async (req, res) => {
 
             if (item.check_out) {
                 const checkOut = new Date(item.check_out);
-                const checkOutHour = checkOut.getHours();
-                const checkOutMinute = checkOut.getMinutes();
+                const istCheckOutStr = checkOut.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+                const istCheckOut = new Date(istCheckOutStr);
+                const checkOutHour = istCheckOut.getHours();
+                const checkOutMinute = istCheckOut.getMinutes();
                 const checkOutMinutesSinceMidnight = checkOutHour * 60 + checkOutMinute;
                 const targetOutMinutesSinceMidnight = 19 * 60; // 7:00 PM
 
@@ -399,8 +403,10 @@ const getEmployeeAnalytics = async (req, res) => {
                 let lateEarlyStatus = 'On Time';
                 if (record.check_in && (lowercaseStatus === 'present' || lowercaseStatus === 'late')) {
                     const checkInTime = new Date(record.check_in);
-                    const checkInHour = checkInTime.getHours();
-                    const checkInMinute = checkInTime.getMinutes();
+                    const istCheckInStr = checkInTime.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+                    const istCheckIn = new Date(istCheckInStr);
+                    const checkInHour = istCheckIn.getHours();
+                    const checkInMinute = istCheckIn.getMinutes();
                     const checkInMinutesSinceMidnight = checkInHour * 60 + checkInMinute;
                     const targetMinutesSinceMidnight = 10 * 60; // 10:00 AM
 
@@ -416,8 +422,10 @@ const getEmployeeAnalytics = async (req, res) => {
                 let extraWorkingTime = 'N/A';
                 if (record.check_out) {
                     const checkOutTime = new Date(record.check_out);
-                    const checkOutHour = checkOutTime.getHours();
-                    const checkOutMinute = checkOutTime.getMinutes();
+                    const istCheckOutStr = checkOutTime.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+                    const istCheckOut = new Date(istCheckOutStr);
+                    const checkOutHour = istCheckOut.getHours();
+                    const checkOutMinute = istCheckOut.getMinutes();
                     const checkOutMinutesSinceMidnight = checkOutHour * 60 + checkOutMinute;
                     const targetOutMinutesSinceMidnight = 19 * 60; // 7:00 PM
 
