@@ -273,6 +273,36 @@ const deleteProfile = async (req, res) => {
     }
 };
 
+const changePassword = async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+    try {
+        if (!oldPassword || !newPassword) {
+            return res.status(400).json({ message: 'Old and new passwords are required' });
+        }
+
+        const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        const user = userRes.rows[0];
+
+        const isMatch = await bcrypt.compare(oldPassword, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'Incorrect old password' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, req.user.id]);
+
+        res.json({ message: 'Password changed successfully' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
 module.exports = {
     register,
     login,
@@ -281,5 +311,6 @@ module.exports = {
     getMe,
     resetPassword,
     updateProfile,
-    deleteProfile
+    deleteProfile,
+    changePassword
 };

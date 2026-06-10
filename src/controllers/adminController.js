@@ -354,12 +354,23 @@ const getEmployeeAnalytics = async (req, res) => {
             return `${hours}h ${minutes}m`;
         };
 
+        const nowLocal = new Date();
+        const tY = nowLocal.getFullYear();
+        const tM = String(nowLocal.getMonth() + 1).padStart(2, '0');
+        const tD = String(nowLocal.getDate()).padStart(2, '0');
+        const todayStr = `${tY}-${tM}-${tD}`;
+
         let current = new Date(start);
         while (current <= end) {
             const cy = current.getFullYear();
             const cm = String(current.getMonth() + 1).padStart(2, '0');
             const cd = String(current.getDate()).padStart(2, '0');
             const dateStr = `${cy}-${cm}-${cd}`;
+
+            if (dateStr > todayStr) {
+                current.setDate(current.getDate() + 1);
+                continue;
+            }
 
             const dOfWeek = current.getDay();
             const dayName = dayNames[dOfWeek];
@@ -489,7 +500,7 @@ const getEmployeeAnalytics = async (req, res) => {
 const getPendingApprovals = async (req, res) => {
     try {
         const pending = await pool.query(
-            "SELECT id, name, email, role, department, phone, gender, created_at FROM users WHERE role = 'employee' AND LOWER(status) = 'pending' ORDER BY created_at DESC"
+            "SELECT id, name, email, role, employee_id, department, phone, gender, created_at, status FROM users WHERE role = 'employee' AND LOWER(status) = 'pending' ORDER BY created_at DESC"
         );
         res.json(pending.rows);
     } catch (err) {
@@ -508,7 +519,7 @@ const approveEmployee = async (req, res) => {
         }
         
         const user = userRes.rows[0];
-        if (user.status === 'approved') {
+        if (user.status === 'approved' || user.status === 'Approved') {
             return res.status(400).json({ message: 'Employee is already approved' });
         }
 
@@ -541,7 +552,7 @@ const approveEmployee = async (req, res) => {
         // Send notification to employee
         await pool.query(
             "INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)",
-            [id, 'Account Approved', `Welcome! Your account has been approved by the Admin. Your Employee ID is ${employee_id}.`]
+            [id, 'Account Approved', `Welcome! Your account has been approved by the Admin. Your Employee ID is ${employee_id}. You can now log in and mark attendance.`]
         );
 
         res.json({
@@ -557,15 +568,125 @@ const approveEmployee = async (req, res) => {
 const rejectEmployee = async (req, res) => {
     const { id } = req.params;
     try {
-        const userRes = await pool.query("SELECT * FROM users WHERE id = $1 AND role = 'employee'", [id]);
-        if (userRes.rows.length === 0) {
-            return res.status(404).json({ message: 'Employee not found' });
+        const result = await pool.query("DELETE FROM users WHERE id = $1 RETURNING id, name, email", [id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found or already deleted' });
         }
 
-        // Delete the user record so they can sign up again
-        await pool.query("DELETE FROM users WHERE id = $1", [id]);
+        res.json({ message: 'Employee registration request rejected and deleted successfully', user: result.rows[0] });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
 
-        res.json({ message: 'Employee registration request rejected and deleted successfully' });
+const getPendingLeaves = async (req, res) => {
+    try {
+        const result = await pool.query(
+            "SELECT lr.*, u.name as employee_name, u.email as employee_email FROM leave_requests lr JOIN users u ON lr.user_id = u.id WHERE lr.status = 'Pending' ORDER BY lr.created_at DESC"
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+const approveLeave = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query(
+            "UPDATE leave_requests SET status = 'Approved' WHERE id = $1 RETURNING *",
+            [id]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Leave request not found' });
+        }
+        const leave = result.rows[0];
+
+        const formatLocalDateStr = (dObj) => {
+            const y = dObj.getFullYear();
+            const m = String(dObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
+        const startStr = formatLocalDateStr(leave.start_date);
+        const endStr = formatLocalDateStr(leave.end_date);
+
+        // Insert 'Leave' status into attendance table for all weekdays in the leave range
+        let current = new Date(leave.start_date);
+        const end = new Date(leave.end_date);
+        while (current <= end) {
+            const dOfWeek = current.getDay();
+            const isWeekend = (dOfWeek === 0 || dOfWeek === 6);
+            if (!isWeekend) {
+                const cy = current.getFullYear();
+                const cm = String(current.getMonth() + 1).padStart(2, '0');
+                const cd = String(current.getDate()).padStart(2, '0');
+                const dateStr = `${cy}-${cm}-${cd}`;
+
+                // Check if there is already an attendance record for this day
+                const existRes = await pool.query(
+                    "SELECT id FROM attendance WHERE user_id = $1 AND date = $2",
+                    [leave.user_id, dateStr]
+                );
+                if (existRes.rows.length === 0) {
+                    await pool.query(
+                        "INSERT INTO attendance (user_id, date, attendance_date, status, attendance_method) VALUES ($1, $2, $2, 'Leave', 'Leave Approved')",
+                        [leave.user_id, dateStr]
+                    );
+                }
+            }
+            current.setDate(current.getDate() + 1);
+        }
+
+        // Notify the employee
+        await pool.query(
+            "INSERT INTO notifications (user_id, title, message) VALUES ($1, 'Leave Request Approved', $2)",
+            [
+                leave.user_id,
+                `Your leave request from ${startStr} to ${endStr} has been approved by the administrator.`
+            ]
+        );
+
+        res.json({ message: 'Leave request approved successfully', leave });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+const rejectLeave = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query(
+            "UPDATE leave_requests SET status = 'Rejected' WHERE id = $1 RETURNING *",
+            [id]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Leave request not found' });
+        }
+        const leave = result.rows[0];
+
+        const formatLocalDateStr = (dObj) => {
+            const y = dObj.getFullYear();
+            const m = String(dObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
+        const startStr = formatLocalDateStr(leave.start_date);
+        const endStr = formatLocalDateStr(leave.end_date);
+
+        // Notify the employee
+        await pool.query(
+            "INSERT INTO notifications (user_id, title, message) VALUES ($1, 'Leave Request Rejected', $2)",
+            [
+                leave.user_id,
+                `Your leave request from ${startStr} to ${endStr} has been rejected by the administrator.`
+            ]
+        );
+
+        res.json({ message: 'Leave request rejected successfully', leave });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');
@@ -583,5 +704,8 @@ module.exports = {
     getEmployeeAnalytics,
     getPendingApprovals,
     approveEmployee,
-    rejectEmployee
+    rejectEmployee,
+    getPendingLeaves,
+    approveLeave,
+    rejectLeave
 };

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, adminLogin, employeeLogin, getMe, resetPassword, updateProfile, deleteProfile } = require('../controllers/authController');
+const { register, login, adminLogin, employeeLogin, getMe, resetPassword, updateProfile, deleteProfile, changePassword } = require('../controllers/authController');
 const { auth } = require('../middleware/auth');
 
 // @route   POST api/auth/register
@@ -32,6 +32,11 @@ router.get('/me', auth, getMe);
 // @desc    Update currently authenticated user's profile
 // @access  Private
 router.put('/profile', auth, updateProfile);
+
+// @route   PUT api/auth/change-password
+// @desc    Change currently authenticated user's password
+// @access  Private
+router.put('/change-password', auth, changePassword);
 
 // @route   DELETE api/auth/profile
 // @desc    Delete currently authenticated user's profile
