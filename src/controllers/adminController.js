@@ -545,7 +545,7 @@ const approveEmployee = async (req, res) => {
 
         // Update user status and employee_id
         const updated = await pool.query(
-            "UPDATE users SET status = 'approved', employee_id = $1 WHERE id = $2 RETURNING id, name, email, employee_id, department, status",
+            "UPDATE users SET status = 'Approved', employee_id = $1 WHERE id = $2 RETURNING id, name, email, employee_id, department, status",
             [employee_id, id]
         );
 

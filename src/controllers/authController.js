@@ -14,7 +14,7 @@ const register = async (req, res) => {
         }
 
         const isEmployee = (role || 'employee') === 'employee';
-        const status = isEmployee ? 'pending' : 'approved';
+        const status = isEmployee ? 'Pending' : 'Approved';
 
         // Hash password
         const salt = await bcrypt.genSalt(10);
